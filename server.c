@@ -22,7 +22,7 @@ do\
 	}\
 } while(0);
 
-#define PORT "8080"
+#define DEFAULT_PORT "8080"
 #define MAX_CONNECTIONS 256
 
 struct client {
@@ -42,12 +42,12 @@ struct server {
 	 CLIENTS: x x ... x | k + 1 2 3 4 5 6 7 8 9 ...
 	            First client--^
 
-	Note: There's usually two listeners, one for ipv4 and one for ipv6
+	Note: There's usually two listeners, one for IPv4 and one for IPv6
 */
 
-void initServer(struct server *server) {
+void initServer(struct server *server, char *port) {
 	int *listeners;
-	int numOfListeners = createListeners(&listeners, PORT);
+	int numOfListeners = createListeners(&listeners, port);
 	checkError(numOfListeners == -1, "SERVER INIT FATAL ERROR - createListeners");
 
 	server->monitors = malloc((numOfListeners + MAX_CONNECTIONS) * sizeof(struct pollfd));
@@ -111,10 +111,14 @@ void killClient(struct server *server, int clientId) {
 int main(int argc, char *argv[]) {
 
 	/* Server init */
-	struct server server;
-	initServer(&server);
+	char *port = DEFAULT_PORT;
+	if(argc >= 2)
+		port = argv[1];
 
-	printf("Server successfully started\n");
+	struct server server;
+	initServer(&server, port);
+
+	printf("Server successfully started on port %s\n", port);
  
 	while(1)
 	{
