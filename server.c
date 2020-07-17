@@ -201,8 +201,6 @@ int main(int argc, char *argv[]) {
 					if(strcmp(msg.name, server.clients[i].name) != 0)
 						continue;
 
-					char target[MAX_NAME_SIZE];
-					int len;
 					switch(msg.type)
 					{
 						case REG_MSG:
@@ -219,10 +217,13 @@ int main(int argc, char *argv[]) {
 							readArgs(msg.payload, server.clients[i].name, NULL);
 							break;
 						case PRV_MSG:
-							len = readArgs(msg.payload, target, NULL);
+						{
+							char target[MAX_NAME_SIZE];
+							int len = readArgs(msg.payload, target, NULL);
 							if(sendByName(&server, target, PRV_MSG, server.clients[i].name, msg.payload + len + 1) != -1)
 								sendMessageStream(server.monitors[i].fd, PRV_MSG, server.clients[i].name, msg.payload + len + 1);
 							break;
+						}
 					}
 				}
 			}
