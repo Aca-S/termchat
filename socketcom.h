@@ -24,6 +24,7 @@
 #define REQ_NIC 3
 #define RES_NIC 4
 #define SIG_DIS 5
+#define PRV_MSG 6
 
 typedef struct {
 	uint32_t type;

@@ -47,15 +47,21 @@ typedef struct {
 
 int changeNick(char *args, int socketFD) {
 	char newNick[MAX_NAME_SIZE];
-	sscanf(args, "%*s %31s", newNick);
+	readArgs(args, newNick, NULL);
 	sendMessageStream(socketFD, REQ_NIC, nick, newNick);
 	strcpy(nick, newNick);
+	return 0;
+}
+
+int sendPrivate(char *args, int socketFD) {
+	sendMessageStream(socketFD, PRV_MSG, nick, args);
 	return 0;
 }
 
 command commands[] =
 {
 	{"/nick", changeNick},
+	{"/msg", sendPrivate},
 };
 
 int numOfCommands = sizeof(commands) / sizeof(command);
@@ -77,17 +83,19 @@ int runCommand(char *buffer, int socketFD) {
 	sscanf(buffer, "%63s", commandStr);
 	int commandPosition = getCommandPosition(commandStr);
 	if(commandPosition != -1)
-		return commands[commandPosition].function(buffer, socketFD);
+		return commands[commandPosition].function(buffer + strlen(commandStr), socketFD);
 	return -1;
 }
 
-void printTimestamped(outputField *chatWindow, message *msg) {
+void printTimestamped(outputField *chatWindow, message *msg, int private) {
 	time_t secs = time(NULL);
 	checkError(secs == -1, "time");
 	struct tm *currentTime = localtime(&secs);
 	checkError(currentTime == NULL, "localtime");
-	wprintw(chatWindow->pad, "[%d:%d] %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
-
+	if(!private)
+		wprintw(chatWindow->pad, "[%d:%d] %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
+	else
+		wprintw(chatWindow->pad, "[%d:%d] {PM} %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
 	if(chatWindow->scrollPosition == 0)
 		refreshOutputField(chatWindow);
 }
@@ -290,7 +298,7 @@ int main(int argc, char *argv[]) {
 			switch(msg.type)
 			{
 				case REG_MSG:
-					printTimestamped(&chat, &msg);
+					printTimestamped(&chat, &msg, 0);
 					break;
 				case RES_CON:
 					addListFieldItem(&clientList, msg.name);
@@ -300,6 +308,9 @@ int main(int argc, char *argv[]) {
 					break;
 				case SIG_DIS:
 					removeListFieldItem(&clientList, msg.name);
+					break;
+				case PRV_MSG:
+					printTimestamped(&chat, &msg, 1);
 					break;
 			}
 			refreshInputField(&chatInput);

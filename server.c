@@ -118,6 +118,15 @@ int broadcast(struct server *server, uint32_t type, char *name, char *payload, .
 	return 0;
 }
 
+int sendByName(struct server *server, char* target, uint32_t type, char *name, char *payload) {
+	for(int i = server->numOfListeners; i < server->numOfMonitors; i++)
+	{
+		if(strcmp(target, server->clients[i].name) == 0)
+			return sendMessageStream(server->monitors[i].fd, type, name, payload);
+	}
+	return -1;
+}
+
 void killClient(struct server *server, int clientId) {
 	broadcast(server, SIG_DIS, server->clients[clientId].name, NULL, clientId, -1);
 	close(server->monitors[clientId].fd);
@@ -185,13 +194,15 @@ int main(int argc, char *argv[]) {
 
 					/* We're deserializing the message so we can check its type and decide what to do with it */
 					message msg = deserialize_struct_message(buffer);
-					if(msg.type == REG_MSG && sanitize(&msg) == 0)
+					if(sanitize(&msg) == 0 && (msg.type == REG_MSG || msg.type == PRV_MSG))
 						continue;
 
 					/* We're checking to see if the client name has been tampered with */
 					if(strcmp(msg.name, server.clients[i].name) != 0)
 						continue;
 
+					char target[MAX_NAME_SIZE];
+					int len;
 					switch(msg.type)
 					{
 						case REG_MSG:
@@ -206,6 +217,11 @@ int main(int argc, char *argv[]) {
 						case REQ_NIC:
 							broadcast(&server, RES_NIC, server.clients[i].name, msg.payload, -1);
 							readArgs(msg.payload, server.clients[i].name, NULL);
+							break;
+						case PRV_MSG:
+							len = readArgs(msg.payload, target, NULL);
+							if(sendByName(&server, target, PRV_MSG, server.clients[i].name, msg.payload + len + 1) != -1)
+								sendMessageStream(server.monitors[i].fd, PRV_MSG, server.clients[i].name, msg.payload + len + 1);
 							break;
 					}
 				}

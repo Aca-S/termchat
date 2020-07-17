@@ -123,7 +123,8 @@ int readArgs(char *str, ...) {
 	va_start(args, str);
 	int pos = 0, n;
 	char *arg = va_arg(args, char *);
-	while(arg != NULL && sscanf(str + pos, "%s%n", arg, &n) == 1)
+	/* Currently scanning up to 31 chars, should get the value from a macro */
+	while(arg != NULL && sscanf(str + pos, "%31s%n", arg, &n) == 1)
 	{
 		pos += n;
 		arg = va_arg(args, char *);
@@ -258,7 +259,7 @@ int printPeerInfo(int socketFD) {
 		return -1;
 	char host[NI_MAXHOST], service[NI_MAXSERV];
 	if(getnameinfo((struct sockaddr*)&address, addressLength, host, sizeof(host), service, sizeof(service), 0) == -1)
-		return -1;;
+		return -1;
 	printf("address: %s, port: %s\n", host, service);
 	return 0;
 }
