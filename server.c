@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <errno.h>
 
 #include "socketcom.h"
@@ -92,12 +93,33 @@ int acceptClient(struct server *server, int listeningSocketFD) {
 	return clientSocketFD;
 }
 
-void killClient(struct server *server, int clientId) {
+/*
+	The optional args should represent the IDs of clients which not to broadcast to.
+	They have to be listed in rising order and have to end with a negative value.
+*/
+int broadcast(struct server *server, uint32_t type, char *name, char *payload, ...) {
+	va_list excludes;
+	va_start(excludes, payload);
+	int exclude = va_arg(excludes, int);
 	for(int i = server->numOfListeners; i < server->numOfMonitors; i++)
 	{
-		if(i != clientId)
-			sendDisSig(server->monitors[i].fd, server->clients[clientId].name);
+		if(i == exclude)
+		{
+			exclude = va_arg(excludes, int);
+			continue;
+		}
+		if(sendMessageStream(server->monitors[i].fd, type, name, payload) == -1)
+		{
+			va_end(excludes);
+			return -1;
+		}
 	}
+	va_end(excludes);
+	return 0;
+}
+
+void killClient(struct server *server, int clientId) {
+	broadcast(server, SIG_DIS, server->clients[clientId].name, NULL, clientId, -1);
 	close(server->monitors[clientId].fd);
 	server->monitors[clientId].fd = -1;
 	for(int i = clientId; i < server->numOfMonitors - 1; i++)
@@ -139,7 +161,7 @@ int main(int argc, char *argv[]) {
 					{
 						printf("New connection from ");
 						checkError(printPeerInfo(server.monitors[server.numOfMonitors - 1].fd) == -1, "printPeerInfo");
-						sendRegMsg(server.monitors[server.numOfMonitors - 1].fd, "SERVER", "To set a name, do /nick <name>");
+						sendMessageStream(server.monitors[server.numOfMonitors - 1].fd, REG_MSG, "SERVER", "To set a name, do /nick <name>");
 					}
 					else
 						printf("A client failed to connect to the server\n");
@@ -173,22 +195,17 @@ int main(int argc, char *argv[]) {
 					switch(msg.type)
 					{
 						case REG_MSG:
-							for(int j = server.numOfListeners; j < server.numOfMonitors; j++)
-								sendRegMsg(server.monitors[j].fd, server.clients[i].name, msg.payload);
+							broadcast(&server, REG_MSG, server.clients[i].name, msg.payload, -1);
 							break;
 						case REQ_CON:
 							strcpy(server.clients[i].name, msg.name);
+							broadcast(&server, RES_CON, server.clients[i].name, NULL, i, -1);
 							for(int j = server.numOfListeners; j < server.numOfMonitors; j++)
-							{
-								if(j != i)
-									sendConRes(server.monitors[j].fd, server.clients[i].name);
-								sendConRes(server.monitors[i].fd, server.clients[j].name);
-							}
+								sendMessageStream(server.monitors[i].fd, RES_CON, server.clients[j].name, NULL);
 							break;
 						case REQ_NIC:
-							for(int j = server.numOfListeners; j < server.numOfMonitors; j++)
-								sendNicRes(server.monitors[j].fd, server.clients[i].name, msg.payload);
-							strcpy(server.clients[i].name, msg.payload);
+							broadcast(&server, RES_NIC, server.clients[i].name, msg.payload, -1);
+							readArgs(msg.payload, server.clients[i].name, NULL);
 							break;
 					}
 				}

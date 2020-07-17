@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include <errno.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -113,6 +114,24 @@ int sendMessageStream(int socketFD, uint32_t type, char *name, char *payload) {
 	char buffer[TOTAL_BUFFER_SIZE];
 	serialize_struct_message(buffer, &msg);
 	return sendByteStream(socketFD, buffer, MESSAGE_PREFIX_SIZE + msg.payloadLength);
+}
+
+int readArgs(char *str, ...) {
+	/* Needs to scan up to MAX_PARAM_LENGTH */
+	/* MAX_PARAM_LENGTH is yet to be defined */
+	va_list args;
+	va_start(args, str);
+	int pos = 0, n;
+	char *arg = va_arg(args, char *);
+	while(arg != NULL && sscanf(str + pos, "%s%n", arg, &n) == 1)
+	{
+		pos += n;
+		arg = va_arg(args, char *);
+	}
+	va_end(args);
+	if(arg != NULL)
+		return -1;
+	return pos;
 }
 
 int setSocketNonBlocking(int socketFD) {
@@ -242,28 +261,4 @@ int printPeerInfo(int socketFD) {
 		return -1;;
 	printf("address: %s, port: %s\n", host, service);
 	return 0;
-}
-
-int sendRegMsg(int socketFD, char *name, char *text) {
-	return sendMessageStream(socketFD, REG_MSG, name, text);
-}
-
-int sendConReq(int socketFD, char *name) {
-	return sendMessageStream(socketFD, REQ_CON, name, NULL);
-}
-
-int sendConRes(int socketFD, char *name) {
-	return sendMessageStream(socketFD, RES_CON, name, NULL);
-}
-
-int sendNicReq(int socketFD, char *name, char *nick) {
-	return sendMessageStream(socketFD, REQ_NIC, name, nick);
-}
-
-int sendNicRes(int socketFD, char *name, char *nick) {
-	return sendMessageStream(socketFD, RES_NIC, name, nick);
-}
-
-int sendDisSig(int socketFD, char *name) {
-	return sendMessageStream(socketFD, SIG_DIS, name, NULL);
 }

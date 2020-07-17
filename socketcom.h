@@ -44,6 +44,7 @@ int receiveByteStream(int socketFD, char *buffer, int length);
 int receiveMessageStream(int socketFD, char *buffer);
 int sendByteStream(int socketFD, char *buffer, int length);
 int sendMessageStream(int socketFD, uint32_t type, char *name, char *payload);
+int readArgs(char *str, ...);
 
 /* sockets */
 int setSocketNonBlocking(int socketFD);
@@ -51,13 +52,5 @@ int createListeners(int **listeners, char *portStr);
 int acceptConnection(int listeningSocketFD);
 int connectToServer(char *addressStr, char *portStr);
 int printPeerInfo(int socketFD);
-
-/* utility function for easier message sending based on type */
-int sendRegMsg(int socketFD, char *name, char *text);
-int sendConReq(int socketFD, char *name);
-int sendConRes(int socketFD, char *name);
-int sendNicReq(int socketFD, char *name, char *nick);
-int sendNicRes(int socketFD, char *name, char *nick);
-int sendDisSig(int socketFD, char *name);
 
 #endif

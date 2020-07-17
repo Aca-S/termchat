@@ -42,13 +42,13 @@ char nick[MAX_NAME_SIZE] = "CLIENT";
 
 typedef struct {
 	char *commandStr;
-	int (*function)(char *args, int *socketFD);
+	int (*function)(char *args, int socketFD);
 } command;
 
-int changeNick(char *args, int *socketFD) {
+int changeNick(char *args, int socketFD) {
 	char newNick[MAX_NAME_SIZE];
 	sscanf(args, "%*s %31s", newNick);
-	sendNicReq(*socketFD, nick, newNick);
+	sendMessageStream(socketFD, REQ_NIC, nick, newNick);
 	strcpy(nick, newNick);
 	return 0;
 }
@@ -72,7 +72,7 @@ int isCommand(char *buffer) {
 	return buffer[0] == '/';
 }
 
-int runCommand(char *buffer, int *socketFD) {
+int runCommand(char *buffer, int socketFD) {
 	char commandStr[64];
 	sscanf(buffer, "%63s", commandStr);
 	int commandPosition = getCommandPosition(commandStr);
@@ -217,7 +217,7 @@ int main(int argc, char *argv[]) {
 	nodelay(chatInput.pad, TRUE);
 
 	/* Setup complete - sending initial connection message to server */
-	checkError(sendConReq(socketFD, nick) == -1, "sendConReq");
+	checkError(sendMessageStream(socketFD, REQ_CON, nick, NULL) == -1, "sendMessageStream");
 
 	/* Polling for activity on either stdin or the socket */
 	activeWindow = INPUT_FIELD;
@@ -272,9 +272,9 @@ int main(int argc, char *argv[]) {
 			if(c == '\n' || c == KEY_ENTER)
 			{
 				if(isCommand(chatInput.lineBuffer.buffer))
-					runCommand(chatInput.lineBuffer.buffer, &socketFD);
+					runCommand(chatInput.lineBuffer.buffer, socketFD);
 				else
-					checkError(sendRegMsg(socketFD, nick, chatInput.lineBuffer.buffer) == -1, "sendRegMsg");
+					checkError(sendMessageStream(socketFD, REG_MSG, nick, chatInput.lineBuffer.buffer) == -1, "sendMessageStream");
 			}
 			refreshInputField(&chatInput);
 		}
