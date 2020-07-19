@@ -45,19 +45,8 @@ typedef struct {
 	int (*function)(char *args, int socketFD);
 } command;
 
-int changeNick(char *args, int socketFD) {
-	char newNick[MAX_NAME_SIZE];
-	if(readArgs(args, newNick, NULL) == -1)
-		return -1;
-	if(sendMessageStream(socketFD, REQ_M | NIC_F, nick, newNick) == -1)
-		return -1;
-	return 0;
-}
-
-int sendPrivate(char *args, int socketFD) {
-	sendMessageStream(socketFD, REQ_M | PRV_F, nick, args);
-	return 0;
-}
+int changeNick(char *args, int socketFD);
+int sendPrivate(char *args, int socketFD);
 
 command commands[] =
 {
@@ -66,45 +55,11 @@ command commands[] =
 };
 
 int numOfCommands = sizeof(commands) / sizeof(command);
-int getCommandPosition(char *command) {
-	for(int i = 0; i < numOfCommands; i++)
-	{
-		if(strcmp(command, commands[i].commandStr) == 0)
-			return i;
-	}
-	return -1;
-}
+int getCommandPosition(char *command);
+int isCommand(char *buffer);
+int runCommand(char *buffer, int socketFD);
 
-int isCommand(char *buffer) {
-	return buffer[0] == '/';
-}
-
-int runCommand(char *buffer, int socketFD) {
-	char commandStr[64];
-	sscanf(buffer, "%63s", commandStr);
-	int commandPosition = getCommandPosition(commandStr);
-	if(commandPosition != -1)
-		return commands[commandPosition].function(buffer + strlen(commandStr), socketFD);
-	return -1;
-}
-
-void printTimestamped(outputField *chatWindow, message *msg) {
-	time_t secs = time(NULL);
-	checkError(secs == -1, "time");
-	struct tm *currentTime = localtime(&secs);
-	checkError(currentTime == NULL, "localtime");
-	if((msg->type & MASK_F) == REG_F)
-		wprintw(chatWindow->pad, "[%d:%d] %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
-	else if((msg->type & MASK_F) == PRV_F)
-	{
-		if((msg->type & MASK_M) == RES_M)
-			wprintw(chatWindow->pad, "[%d:%d] PM to %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
-		else if((msg->type & MASK_M) == SIG_M)
-			wprintw(chatWindow->pad, "[%d:%d] PM from %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
-	}
-	if(chatWindow->scrollPosition == 0)
-		refreshOutputField(chatWindow);
-}
+void printTimestamped(outputField *chatWindow, message *msg);
 
 int main(int argc, char *argv[]) {
 
@@ -347,4 +302,58 @@ int main(int argc, char *argv[]) {
 	/* We never get here */
 	endwin();
 	exit(EXIT_SUCCESS);
+}
+
+int changeNick(char *args, int socketFD) {
+	char newNick[MAX_NAME_SIZE];
+	if(readArgs(args, newNick, NULL) == -1)
+		return -1;
+	if(sendMessageStream(socketFD, REQ_M | NIC_F, nick, newNick) == -1)
+		return -1;
+	return 0;
+}
+
+int sendPrivate(char *args, int socketFD) {
+	sendMessageStream(socketFD, REQ_M | PRV_F, nick, args);
+	return 0;
+}
+
+int getCommandPosition(char *command) {
+	for(int i = 0; i < numOfCommands; i++)
+	{
+		if(strcmp(command, commands[i].commandStr) == 0)
+			return i;
+	}
+	return -1;
+}
+
+int isCommand(char *buffer) {
+	return buffer[0] == '/';
+}
+
+int runCommand(char *buffer, int socketFD) {
+	char commandStr[64];
+	sscanf(buffer, "%63s", commandStr);
+	int commandPosition = getCommandPosition(commandStr);
+	if(commandPosition != -1)
+		return commands[commandPosition].function(buffer + strlen(commandStr), socketFD);
+	return -1;
+}
+
+void printTimestamped(outputField *chatWindow, message *msg) {
+	time_t secs = time(NULL);
+	checkError(secs == -1, "time");
+	struct tm *currentTime = localtime(&secs);
+	checkError(currentTime == NULL, "localtime");
+	if((msg->type & MASK_F) == REG_F)
+		wprintw(chatWindow->pad, "[%d:%d] %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
+	else if((msg->type & MASK_F) == PRV_F)
+	{
+		if((msg->type & MASK_M) == RES_M)
+			wprintw(chatWindow->pad, "[%d:%d] PM to %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
+		else if((msg->type & MASK_M) == SIG_M)
+			wprintw(chatWindow->pad, "[%d:%d] PM from %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
+	}
+	if(chatWindow->scrollPosition == 0)
+		refreshOutputField(chatWindow);
 }
