@@ -51,7 +51,6 @@ int changeNick(char *args, int socketFD) {
 		return -1;
 	if(sendMessageStream(socketFD, REQ_M | NIC_F, nick, newNick) == -1)
 		return -1;
-	strcpy(nick, newNick);
 	return 0;
 }
 
@@ -309,9 +308,12 @@ int main(int argc, char *argv[]) {
 				switch(msg.type & MASK_F)
 				{
 					case PRV_F:
-						printTimestamped(&chat, &msg);
+						if((msg.type & MASK_S) == SCS_S)
+							printTimestamped(&chat, &msg);
 						break;
 					case NIC_F:
+						if((msg.type & MASK_S) == SCS_S)
+							readArgs(msg.payload, nick, NULL) == -1;
 						break;
 				}
 			}

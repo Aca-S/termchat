@@ -108,25 +108,18 @@ int broadcast(struct server *server, uint32_t type, char *name, char *payload, .
 			exclude = va_arg(excludes, int);
 			continue;
 		}
-		if(sendMessageStream(server->monitors[i].fd, type, name, payload) == -1)
-		{
-			va_end(excludes);
-			return -1;
-		}
+		/* We're not checking if sending to a client failed - maybe they DC-ed in the middle of the broadcast */
+		sendMessageStream(server->monitors[i].fd, type, name, payload);
 	}
 	va_end(excludes);
 	return 0;
 }
 
-int sendByName(struct server *server, char* target, uint32_t type, char *name, char *payload) {
+int findByName(struct server *server, char *target) {
 	for(int i = server->numOfListeners; i < server->numOfMonitors; i++)
 	{
 		if(strcmp(target, server->clients[i].name) == 0)
-		{
-			if(sendMessageStream(server->monitors[i].fd, type, name, payload) == -1)
-				return -1;
 			return i;
-		}
 	}
 	return -1;
 }
@@ -220,9 +213,16 @@ int main(int argc, char *argv[]) {
 						{
 							char target[MAX_NAME_SIZE];
 							int len = readArgs(msg.payload, target, NULL);
-							int targetID = sendByName(&server, target, SIG_M | PRV_F, server.clients[i].name, msg.payload + len + 1);
-							if(targetID != -1)
-								sendMessageStream(server.monitors[i].fd, RES_M | PRV_F, server.clients[targetID].name, msg.payload + len + 1);
+							if(len != -1)
+							{
+								int targetID = findByName(&server, target);
+								if(targetID != -1 && sendMessageStream(server.monitors[targetID].fd, SIG_M | PRV_F, server.clients[i].name, msg.payload + len + 1) != -1)
+								{
+									sendMessageStream(server.monitors[i].fd, RES_M | SCS_S | PRV_F, server.clients[targetID].name, msg.payload + len + 1);
+									break;
+								}
+							}
+							sendMessageStream(server.monitors[i].fd, RES_M | FLR_S | PRV_F, server.clients[i].name, target);
 							break;
 						}
 						case CON_F:
@@ -232,10 +232,20 @@ int main(int argc, char *argv[]) {
 								sendMessageStream(server.monitors[i].fd, SIG_M | CON_F, server.clients[j].name, NULL);
 							break;
 						case NIC_F:
-							/* sendMessageStream(server.monitors[i].fd, RES_M | NIC_F, server.clients[i].name, msg.payload); */
-							broadcast(&server, SIG_M | NIC_F, server.clients[i].name, msg.payload, -1);
-							readArgs(msg.payload, server.clients[i].name, NULL);
+						{
+							char newNick[MAX_NAME_SIZE];
+							if(readArgs(msg.payload, newNick, NULL) != -1)
+							{
+								if(sendMessageStream(server.monitors[i].fd, RES_M | SCS_S | NIC_F, server.clients[i].name, newNick) != -1)
+								{
+									broadcast(&server, SIG_M | NIC_F, server.clients[i].name, msg.payload, -1);
+									strcpy(server.clients[i].name, newNick);
+									break;
+								}
+							}
+							sendMessageStream(server.monitors[i].fd, RES_M | FLR_S | NIC_F, server.clients[i].name, newNick);
 							break;
+						}
 					}
 				}
 			}
