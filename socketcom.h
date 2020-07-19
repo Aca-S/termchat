@@ -17,14 +17,24 @@
 	then receive another PAYLOAD LENGTH bytes
 */
 
-/* Message types */
-#define REG_MSG 0
-#define REQ_CON 1
-#define RES_CON 2
-#define REQ_NIC 3
-#define RES_NIC 4
-#define SIG_DIS 5
-#define PRV_MSG 6
+/* Main message types - first 4 bits of the type indicator */
+#define MASK_M 0xF
+#define REQ_M 0
+#define RES_M 1
+#define SIG_M 2
+
+/* Message statuses - second 4 bits of the type indicator */
+#define MASK_S 0xF0
+#define SCS_S 16
+#define FLR_S 32
+
+/* Message subtypes - final 24 bits of the type indicator */
+#define MASK_F 0xFFFFFF00
+#define REG_F 256
+#define PRV_F 512
+#define CON_F 768
+#define DIS_F 1024
+#define NIC_F 1280
 
 typedef struct {
 	uint32_t type;

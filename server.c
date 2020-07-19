@@ -122,13 +122,17 @@ int sendByName(struct server *server, char* target, uint32_t type, char *name, c
 	for(int i = server->numOfListeners; i < server->numOfMonitors; i++)
 	{
 		if(strcmp(target, server->clients[i].name) == 0)
-			return sendMessageStream(server->monitors[i].fd, type, name, payload);
+		{
+			if(sendMessageStream(server->monitors[i].fd, type, name, payload) == -1)
+				return -1;
+			return i;
+		}
 	}
 	return -1;
 }
 
 void killClient(struct server *server, int clientId) {
-	broadcast(server, SIG_DIS, server->clients[clientId].name, NULL, clientId, -1);
+	broadcast(server, SIG_M | DIS_F, server->clients[clientId].name, NULL, clientId, -1);
 	close(server->monitors[clientId].fd);
 	server->monitors[clientId].fd = -1;
 	for(int i = clientId; i < server->numOfMonitors - 1; i++)
@@ -170,7 +174,7 @@ int main(int argc, char *argv[]) {
 					{
 						printf("New connection from ");
 						checkError(printPeerInfo(server.monitors[server.numOfMonitors - 1].fd) == -1, "printPeerInfo");
-						sendMessageStream(server.monitors[server.numOfMonitors - 1].fd, REG_MSG, "SERVER", "To set a name, do /nick <name>");
+						sendMessageStream(server.monitors[server.numOfMonitors - 1].fd, SIG_M | REG_F, "SERVER", "To set a name, do /nick <name>");
 					}
 					else
 						printf("A client failed to connect to the server\n");
@@ -194,36 +198,44 @@ int main(int argc, char *argv[]) {
 
 					/* We're deserializing the message so we can check its type and decide what to do with it */
 					message msg = deserialize_struct_message(buffer);
-					if(sanitize(&msg) == 0 && (msg.type == REG_MSG || msg.type == PRV_MSG))
+
+					/* Remove all non-alphanumeric characters from the message payload */
+					if(sanitize(&msg) == 0 && (msg.type == (REQ_M | REG_F) || msg.type == (REQ_M | PRV_F)))
+						continue;
+
+					/* The server only receives requests and nothing else */
+					if((msg.type & MASK_M) != REQ_M)
 						continue;
 
 					/* We're checking to see if the client name has been tampered with */
 					if(strcmp(msg.name, server.clients[i].name) != 0)
 						continue;
 
-					switch(msg.type)
+					switch(msg.type & MASK_F)
 					{
-						case REG_MSG:
-							broadcast(&server, REG_MSG, server.clients[i].name, msg.payload, -1);
+						case REG_F:
+							broadcast(&server, SIG_M | REG_F, server.clients[i].name, msg.payload, -1);
 							break;
-						case REQ_CON:
-							strcpy(server.clients[i].name, msg.name);
-							broadcast(&server, RES_CON, server.clients[i].name, NULL, i, -1);
-							for(int j = server.numOfListeners; j < server.numOfMonitors; j++)
-								sendMessageStream(server.monitors[i].fd, RES_CON, server.clients[j].name, NULL);
-							break;
-						case REQ_NIC:
-							broadcast(&server, RES_NIC, server.clients[i].name, msg.payload, -1);
-							readArgs(msg.payload, server.clients[i].name, NULL);
-							break;
-						case PRV_MSG:
+						case PRV_F:
 						{
 							char target[MAX_NAME_SIZE];
 							int len = readArgs(msg.payload, target, NULL);
-							if(sendByName(&server, target, PRV_MSG, server.clients[i].name, msg.payload + len + 1) != -1)
-								sendMessageStream(server.monitors[i].fd, PRV_MSG, server.clients[i].name, msg.payload + len + 1);
+							int targetID = sendByName(&server, target, SIG_M | PRV_F, server.clients[i].name, msg.payload + len + 1);
+							if(targetID != -1)
+								sendMessageStream(server.monitors[i].fd, RES_M | PRV_F, server.clients[targetID].name, msg.payload + len + 1);
 							break;
 						}
+						case CON_F:
+							strcpy(server.clients[i].name, msg.name);
+							broadcast(&server, SIG_M | CON_F, server.clients[i].name, NULL, i, -1);
+							for(int j = server.numOfListeners; j < server.numOfMonitors; j++)
+								sendMessageStream(server.monitors[i].fd, SIG_M | CON_F, server.clients[j].name, NULL);
+							break;
+						case NIC_F:
+							/* sendMessageStream(server.monitors[i].fd, RES_M | NIC_F, server.clients[i].name, msg.payload); */
+							broadcast(&server, SIG_M | NIC_F, server.clients[i].name, msg.payload, -1);
+							readArgs(msg.payload, server.clients[i].name, NULL);
+							break;
 					}
 				}
 			}

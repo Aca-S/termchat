@@ -47,14 +47,16 @@ typedef struct {
 
 int changeNick(char *args, int socketFD) {
 	char newNick[MAX_NAME_SIZE];
-	readArgs(args, newNick, NULL);
-	sendMessageStream(socketFD, REQ_NIC, nick, newNick);
+	if(readArgs(args, newNick, NULL) == -1)
+		return -1;
+	if(sendMessageStream(socketFD, REQ_M | NIC_F, nick, newNick) == -1)
+		return -1;
 	strcpy(nick, newNick);
 	return 0;
 }
 
 int sendPrivate(char *args, int socketFD) {
-	sendMessageStream(socketFD, PRV_MSG, nick, args);
+	sendMessageStream(socketFD, REQ_M | PRV_F, nick, args);
 	return 0;
 }
 
@@ -87,15 +89,20 @@ int runCommand(char *buffer, int socketFD) {
 	return -1;
 }
 
-void printTimestamped(outputField *chatWindow, message *msg, int private) {
+void printTimestamped(outputField *chatWindow, message *msg) {
 	time_t secs = time(NULL);
 	checkError(secs == -1, "time");
 	struct tm *currentTime = localtime(&secs);
 	checkError(currentTime == NULL, "localtime");
-	if(!private)
+	if((msg->type & MASK_F) == REG_F)
 		wprintw(chatWindow->pad, "[%d:%d] %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
-	else
-		wprintw(chatWindow->pad, "[%d:%d] {PM} %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
+	else if((msg->type & MASK_F) == PRV_F)
+	{
+		if((msg->type & MASK_M) == RES_M)
+			wprintw(chatWindow->pad, "[%d:%d] PM to %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
+		else if((msg->type & MASK_M) == SIG_M)
+			wprintw(chatWindow->pad, "[%d:%d] PM from %s: %s\n", currentTime->tm_hour, currentTime->tm_min, msg->name, msg->payload);
+	}
 	if(chatWindow->scrollPosition == 0)
 		refreshOutputField(chatWindow);
 }
@@ -225,7 +232,7 @@ int main(int argc, char *argv[]) {
 	nodelay(chatInput.pad, TRUE);
 
 	/* Setup complete - sending initial connection message to server */
-	checkError(sendMessageStream(socketFD, REQ_CON, nick, NULL) == -1, "sendMessageStream");
+	checkError(sendMessageStream(socketFD, REQ_M | CON_F, nick, NULL) == -1, "sendMessageStream");
 
 	/* Polling for activity on either stdin or the socket */
 	activeWindow = INPUT_FIELD;
@@ -282,7 +289,7 @@ int main(int argc, char *argv[]) {
 				if(isCommand(chatInput.lineBuffer.buffer))
 					runCommand(chatInput.lineBuffer.buffer, socketFD);
 				else
-					checkError(sendMessageStream(socketFD, REG_MSG, nick, chatInput.lineBuffer.buffer) == -1, "sendMessageStream");
+					checkError(sendMessageStream(socketFD, REQ_M | REG_F, nick, chatInput.lineBuffer.buffer) == -1, "sendMessageStream");
 			}
 			refreshInputField(&chatInput);
 		}
@@ -295,24 +302,42 @@ int main(int argc, char *argv[]) {
 			checkError((received = receiveMessageStream(socketFD, buffer)) == -1, "receiveMessage");
 			checkError(received == 0, "Server closed connection");
 			message msg = deserialize_struct_message(buffer);
-			switch(msg.type)
+
+			/* Handling response messages from server */
+			if((msg.type & MASK_M) == RES_M)
 			{
-				case REG_MSG:
-					printTimestamped(&chat, &msg, 0);
-					break;
-				case RES_CON:
-					addListFieldItem(&clientList, msg.name);
-					break;
-				case RES_NIC:
-					replaceListFieldItem(&clientList, msg.name, msg.payload);
-					break;
-				case SIG_DIS:
-					removeListFieldItem(&clientList, msg.name);
-					break;
-				case PRV_MSG:
-					printTimestamped(&chat, &msg, 1);
-					break;
+				switch(msg.type & MASK_F)
+				{
+					case PRV_F:
+						printTimestamped(&chat, &msg);
+						break;
+					case NIC_F:
+						break;
+				}
 			}
+			/* Handling signal messages from server */
+			else if((msg.type & MASK_M) == SIG_M)
+			{
+				switch(msg.type & MASK_F)
+				{
+					case REG_F:
+						printTimestamped(&chat, &msg);
+						break;
+					case PRV_F:
+						printTimestamped(&chat, &msg);
+						break;
+					case CON_F:
+						addListFieldItem(&clientList, msg.name);
+						break;
+					case DIS_F:
+						removeListFieldItem(&clientList, msg.name);
+						break;
+					case NIC_F:
+						replaceListFieldItem(&clientList, msg.name, msg.payload);
+						break;
+				}
+			}
+			/* Making sure the cursor is back on the input field after updating other elements */
 			refreshInputField(&chatInput);
 		}
 	}
