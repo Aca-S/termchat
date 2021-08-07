@@ -268,7 +268,7 @@ int main(int argc, char *argv[]) {
 						break;
 					case NIC_F:
 						if((msg.type & MASK_S) == SCS_S)
-							readArgs(msg.payload, nick, NULL) == -1;
+							checkError(readArgs(msg.payload, nick, NULL) == -1, "readArgs");
 						break;
 				}
 			}
