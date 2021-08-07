@@ -155,14 +155,21 @@ void initServer(struct server *server, char *port) {
 	int *listeners;
 	int numOfListeners = createListeners(&listeners, port);
 	checkError(numOfListeners == -1, "SERVER INIT FATAL ERROR - createListeners");
+	
+	int totalNumOfMonitors = numOfListeners + MAX_CONNECTIONS;
 
-	server->monitors = malloc((numOfListeners + MAX_CONNECTIONS) * sizeof(struct pollfd));
+	server->monitors = malloc(totalNumOfMonitors * sizeof(struct pollfd));
 	checkError(server->monitors == NULL, "SERVER INIT FATAL ERROR - monitors malloc");
-	memset(server->monitors, 0, sizeof(server->monitors));
+	memset(server->monitors, 0, sizeof(totalNumOfMonitors * sizeof(struct pollfd)));
 
-	server->clients = malloc((numOfListeners + MAX_CONNECTIONS) * sizeof(struct client));
+	/* 
+		We want to keep the monitor and client array indexes aligned to each other
+		for simplicity's sake, so we're allocating totalNumOfMonitors clients
+		and keeping the first numOfListeners clients unused.
+	*/
+	server->clients = malloc(totalNumOfMonitors * sizeof(struct client));
 	checkError(server->clients == NULL, "SERVER INIT FATAL ERROR - clients malloc");
-	memset(server->clients, 0, sizeof(server->clients));
+	memset(server->clients, 0, sizeof(totalNumOfMonitors * sizeof(struct pollfd)));
 
 	for(int i = 0; i < numOfListeners; i++)
 	{
