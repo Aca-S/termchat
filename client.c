@@ -73,7 +73,9 @@ int main(int argc, char *argv[]) {
 	int c;
 
 	/* Drawing connection UI */
-	WINDOW *terminalBorders = createNewWindow(terminalRows, terminalColumns, 0, 0, TRUE);
+	
+	/* Terminal border drawing */
+	createNewWindow(terminalRows, terminalColumns, 0, 0, TRUE);
 
 	label addressLabel;
 	createLabel(&addressLabel, "Address:", terminalRows / 2 - 4, terminalColumns / 2 - 9);
